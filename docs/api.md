@@ -77,6 +77,7 @@ Response:
     "mempoolSize": 17348,
     "decimals": 8,
     "dbSize": 191887866502,
+    "prettyDbSize": "178.7 GB",
     "about": "Blockbook - blockchain indexer."
   },
   "backend": {

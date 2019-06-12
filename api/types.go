@@ -334,6 +334,7 @@ type BlockbookInfo struct {
 	MempoolSize       int                          `json:"mempoolSize"`
 	Decimals          int                          `json:"decimals"`
 	DbSize            int64                        `json:"dbSize"`
+	PrettyDbSize      string                       `json:"prettyDbSize"`
 	DbSizeFromColumns int64                        `json:"dbSizeFromColumns,omitempty"`
 	DbColumns         []common.InternalStateColumn `json:"dbColumns,omitempty"`
 	About             string                       `json:"about"`

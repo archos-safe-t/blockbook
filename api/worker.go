@@ -13,6 +13,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/golang/glog"
@@ -1088,6 +1089,42 @@ func (w *Worker) ComputeFeeStats(blockFrom, blockTo int, stopCompute chan os.Sig
 	return nil
 }
 
+const (
+	BYTE = 1 << (10 * iota)
+	KILOBYTE
+	MEGABYTE
+	GIGABYTE
+	TERABYTE
+)
+
+func prettifySize(size int64) string {
+	unit := ""
+	value := float64(size)
+
+	switch {
+	case size >= TERABYTE:
+		unit = "TB"
+		value = value / TERABYTE
+	case size >= GIGABYTE:
+		unit = "GB"
+		value = value / GIGABYTE
+	case size >= MEGABYTE:
+		unit = "MB"
+		value = value / MEGABYTE
+	case size >= KILOBYTE:
+		unit = "KB"
+		value = value / KILOBYTE
+	case size >= BYTE:
+		unit = "B"
+	case size == 0:
+		return "0"
+	}
+
+	result := strconv.FormatFloat(value, 'f', 1, 64)
+	result = strings.TrimSuffix(result, ".0")
+	return result + " " + unit
+}
+
 // GetSystemInfo returns information about system
 func (w *Worker) GetSystemInfo(internal bool) (*SystemInfo, error) {
 	start := time.Now()
@@ -1104,6 +1141,10 @@ func (w *Worker) GetSystemInfo(internal bool) (*SystemInfo, error) {
 		columnStats = w.is.GetAllDBColumnStats()
 		internalDBSize = w.is.DBSizeTotal()
 	}
+	var dbSize int64
+	var prettyDbSize string
+	dbSize = w.db.DatabaseSizeOnDisk()
+	prettyDbSize = prettifySize(dbSize)
 	blockbookInfo := &BlockbookInfo{
 		Coin:              w.is.Coin,
 		Host:              w.is.Host,
@@ -1119,7 +1160,8 @@ func (w *Worker) GetSystemInfo(internal bool) (*SystemInfo, error) {
 		LastMempoolTime:   lastMempoolTime,
 		MempoolSize:       mempoolSize,
 		Decimals:          w.chainParser.AmountDecimals(),
-		DbSize:            w.db.DatabaseSizeOnDisk(),
+		DbSize:            dbSize,
+		PrettyDbSize:      prettyDbSize,
 		DbSizeFromColumns: internalDBSize,
 		DbColumns:         columnStats,
 		About:             Text.BlockbookAbout,
