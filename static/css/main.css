@@ -36,7 +36,7 @@ h3 {
 }
 
 .navbar-form .form-control {
-    background-color: gray;
+    background-color: #8f78b7;
     color: #fff;
     border-radius: 3px;
     -webkit-border-radius: 3px;
@@ -92,12 +92,12 @@ h3 {
     margin: 0;
     padding-bottom: 0;
     padding-top: 0;
-    background-color: #212121;
+    background-color: #673ab7;
     border: 0;
 }
 
 .bg-trezor {
-    background-color: #212121!important;
+    background-color: #673ab7!important;
     height: 53px;
 }
 
@@ -120,7 +120,7 @@ h3 {
 }
 
 #footer {
-    background-color: #212121;
+    background-color: #673ab7;
     color: #fff;
     height: 53px;
     overflow: hidden;

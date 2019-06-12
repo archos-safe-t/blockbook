@@ -77,7 +77,7 @@ Response:
     "mempoolSize": 17348,
     "decimals": 8,
     "dbSize": 191887866502,
-    "about": "Blockbook - blockchain indexer for TREZOR wallet https://trezor.io/. Do not use for any other purpose."
+    "about": "Blockbook - blockchain indexer."
   },
   "backend": {
     "chain": "main",
