@@ -45,7 +45,7 @@ build-images: clean-images
 .bin-image:
 	@if [ $$(build/tools/image_status.sh $(BIN_IMAGE):latest build/docker) != "ok" ]; then \
 		echo "Building image $(BIN_IMAGE)..."; \
-		docker build --no-cache=$(NO_CACHE) -t $(BIN_IMAGE) build/docker/bin; \
+		docker build --no-cache=$(NO_CACHE) -t $(BIN_IMAGE) -f build/docker/bin/Dockerfile ./; \
 	else \
 		echo "Image $(BIN_IMAGE) is up to date"; \
 	fi
