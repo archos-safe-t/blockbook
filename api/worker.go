@@ -143,6 +143,7 @@ func (w *Worker) GetTransactionFromBchainTx(bchainTx *bchain.Tx, height uint32, 
 	var valInSat, valOutSat, feesSat big.Int
 	var pValInSat *big.Int
 	vins := make([]Vin, len(bchainTx.Vin))
+	rbf := false
 	for i := range bchainTx.Vin {
 		bchainVin := &bchainTx.Vin[i]
 		vin := &vins[i]
@@ -150,6 +151,10 @@ func (w *Worker) GetTransactionFromBchainTx(bchainTx *bchain.Tx, height uint32, 
 		vin.N = i
 		vin.Vout = bchainVin.Vout
 		vin.Sequence = int64(bchainVin.Sequence)
+		// detect explicit Replace-by-Fee transactions as defined by BIP125
+		if bchainTx.Confirmations == 0 && bchainVin.Sequence < 0xffffffff-1 {
+			rbf = true
+		}
 		vin.Hex = bchainVin.ScriptSig.Hex
 		vin.Coinbase = bchainVin.Coinbase
 		if w.chainType == bchain.ChainBitcoinType {
@@ -167,7 +172,7 @@ func (w *Worker) GetTransactionFromBchainTx(bchainTx *bchain.Tx, height uint32, 
 						if err == bchain.ErrTxNotFound {
 							// try to get AddrDesc using coin specific handling and continue processing the tx
 							vin.AddrDesc = w.chainParser.GetAddrDescForUnknownInput(bchainTx, i)
-							vin.Addresses, vin.Searchable, err = w.chainParser.GetAddressesFromAddrDesc(vin.AddrDesc)
+							vin.Addresses, vin.IsAddress, err = w.chainParser.GetAddressesFromAddrDesc(vin.AddrDesc)
 							if err != nil {
 								glog.Warning("GetAddressesFromAddrDesc tx ", bchainVin.Txid, ", addrDesc ", vin.AddrDesc, ": ", err)
 							}
@@ -186,7 +191,7 @@ func (w *Worker) GetTransactionFromBchainTx(bchainTx *bchain.Tx, height uint32, 
 					if len(otx.Vout) > int(vin.Vout) {
 						vout := &otx.Vout[vin.Vout]
 						vin.ValueSat = (*Amount)(&vout.ValueSat)
-						vin.AddrDesc, vin.Addresses, vin.Searchable, err = w.getAddressesFromVout(vout)
+						vin.AddrDesc, vin.Addresses, vin.IsAddress, err = w.getAddressesFromVout(vout)
 						if err != nil {
 							glog.Errorf("getAddressesFromVout error %v, vout %+v", err, vout)
 						}
@@ -196,7 +201,7 @@ func (w *Worker) GetTransactionFromBchainTx(bchainTx *bchain.Tx, height uint32, 
 						output := &tas.Outputs[vin.Vout]
 						vin.ValueSat = (*Amount)(&output.ValueSat)
 						vin.AddrDesc = output.AddrDesc
-						vin.Addresses, vin.Searchable, err = output.Addresses(w.chainParser)
+						vin.Addresses, vin.IsAddress, err = output.Addresses(w.chainParser)
 						if err != nil {
 							glog.Errorf("output.Addresses error %v, tx %v, output %v", err, bchainVin.Txid, i)
 						}
@@ -213,7 +218,7 @@ func (w *Worker) GetTransactionFromBchainTx(bchainTx *bchain.Tx, height uint32, 
 					glog.Errorf("GetAddrDescFromAddress error %v, tx %v, bchainVin %v", err, bchainTx.Txid, bchainVin)
 				}
 				vin.Addresses = bchainVin.Addresses
-				vin.Searchable = true
+				vin.IsAddress = true
 			}
 		}
 	}
@@ -225,7 +230,7 @@ func (w *Worker) GetTransactionFromBchainTx(bchainTx *bchain.Tx, height uint32, 
 		vout.ValueSat = (*Amount)(&bchainVout.ValueSat)
 		valOutSat.Add(&valOutSat, &bchainVout.ValueSat)
 		vout.Hex = bchainVout.ScriptPubKey.Hex
-		vout.AddrDesc, vout.Addresses, vout.Searchable, err = w.getAddressesFromVout(bchainVout)
+		vout.AddrDesc, vout.Addresses, vout.IsAddress, err = w.getAddressesFromVout(bchainVout)
 		if err != nil {
 			glog.V(2).Infof("getAddressesFromVout error %v, %v, output %v", err, bchainTx.Txid, bchainVout.N)
 		}
@@ -318,6 +323,7 @@ func (w *Worker) GetTransactionFromBchainTx(bchainTx *bchain.Tx, height uint32, 
 		ValueOutSat:      (*Amount)(&valOutSat),
 		Version:          bchainTx.Version,
 		Hex:              bchainTx.Hex,
+		Rbf:              rbf,
 		Vin:              vins,
 		Vout:             vouts,
 		CoinSpecificData: bchainTx.CoinSpecificData,
@@ -434,7 +440,7 @@ func (w *Worker) txFromTxAddress(txid string, ta *db.TxAddresses, bi *db.BlockIn
 		vin.N = i
 		vin.ValueSat = (*Amount)(&tai.ValueSat)
 		valInSat.Add(&valInSat, &tai.ValueSat)
-		vin.Addresses, vin.Searchable, err = tai.Addresses(w.chainParser)
+		vin.Addresses, vin.IsAddress, err = tai.Addresses(w.chainParser)
 		if err != nil {
 			glog.Errorf("tai.Addresses error %v, tx %v, input %v, tai %+v", err, txid, i, tai)
 		}
@@ -446,7 +452,7 @@ func (w *Worker) txFromTxAddress(txid string, ta *db.TxAddresses, bi *db.BlockIn
 		vout.N = i
 		vout.ValueSat = (*Amount)(&tao.ValueSat)
 		valOutSat.Add(&valOutSat, &tao.ValueSat)
-		vout.Addresses, vout.Searchable, err = tao.Addresses(w.chainParser)
+		vout.Addresses, vout.IsAddress, err = tao.Addresses(w.chainParser)
 		if err != nil {
 			glog.Errorf("tai.Addresses error %v, tx %v, output %v, tao %+v", err, txid, i, tao)
 		}
@@ -844,11 +850,16 @@ func (w *Worker) getAddrDescUtxo(addrDesc bchain.AddressDescriptor, ba *db.AddrB
 							// report only outpoints that are not spent in mempool
 							_, e := spentInMempool[bchainTx.Txid+strconv.Itoa(i)]
 							if !e {
+								coinbase := false
+								if len(bchainTx.Vin) == 1 && len(bchainTx.Vin[0].Coinbase) > 0 {
+									coinbase = true
+								}
 								r = append(r, Utxo{
 									Txid:      bchainTx.Txid,
 									Vout:      int32(i),
 									AmountSat: (*Amount)(&vout.ValueSat),
 									Locktime:  bchainTx.LockTime,
+									Coinbase:  coinbase,
 								})
 							}
 						}
@@ -883,12 +894,25 @@ func (w *Worker) getAddrDescUtxo(addrDesc bchain.AddressDescriptor, ba *db.AddrB
 				}
 				_, e := spentInMempool[txid+strconv.Itoa(int(utxo.Vout))]
 				if !e {
+					confirmations := bestheight - int(utxo.Height) + 1
+					coinbase := false
+					// for performance reasons, check coinbase transactions only in minimim confirmantion range
+					if confirmations < w.chainParser.MinimumCoinbaseConfirmations() {
+						ta, err := w.db.GetTxAddresses(txid)
+						if err != nil {
+							return nil, err
+						}
+						if len(ta.Inputs) == 1 && len(ta.Inputs[0].AddrDesc) == 0 && IsZeroBigInt(&ta.Inputs[0].ValueSat) {
+							coinbase = true
+						}
+					}
 					r = append(r, Utxo{
 						Txid:          txid,
 						Vout:          utxo.Vout,
 						AmountSat:     (*Amount)(&utxo.ValueSat),
 						Height:        int(utxo.Height),
-						Confirmations: bestheight - int(utxo.Height) + 1,
+						Confirmations: confirmations,
+						Coinbase:      coinbase,
 					})
 				}
 				checksum.Sub(&checksum, &utxo.ValueSat)
@@ -949,13 +973,7 @@ func (w *Worker) GetBlocks(page int, blocksOnPage int) (*Blocks, error) {
 	return r, nil
 }
 
-// GetBlock returns paged data about block
-func (w *Worker) GetBlock(bid string, page int, txsOnPage int) (*Block, error) {
-	start := time.Now()
-	page--
-	if page < 0 {
-		page = 0
-	}
+func (w *Worker) getBlockInfoFromBlockID(bid string) (*bchain.BlockInfo, error) {
 	// try to decide if passed string (bid) is block height or block hash
 	// if it's a number, must be less than int32
 	var hash string
@@ -972,6 +990,123 @@ func (w *Worker) GetBlock(bid string, page int, txsOnPage int) (*Block, error) {
 		return nil, NewAPIError("Block not found", true)
 	}
 	bi, err := w.chain.GetBlockInfo(hash)
+	return bi, err
+}
+
+// GetFeeStats returns statistics about block fees
+func (w *Worker) GetFeeStats(bid string) (*FeeStats, error) {
+	// txSpecific extends Tx with an additional Size and Vsize info
+	type txSpecific struct {
+		*bchain.Tx
+		Vsize int `json:"vsize,omitempty"`
+		Size  int `json:"size,omitempty"`
+	}
+
+	start := time.Now()
+	bi, err := w.getBlockInfoFromBlockID(bid)
+	if err != nil {
+		if err == bchain.ErrBlockNotFound {
+			return nil, NewAPIError("Block not found", true)
+		}
+		return nil, NewAPIError(fmt.Sprintf("Block not found, %v", err), true)
+	}
+
+	feesPerKb := make([]int64, 0, len(bi.Txids))
+	totalFeesSat := big.NewInt(0)
+	averageFeePerKb := int64(0)
+
+	for _, txid := range bi.Txids {
+		// Get a raw JSON with transaction details, including size, vsize, hex
+		txSpecificJSON, err := w.chain.GetTransactionSpecific(&bchain.Tx{Txid: txid})
+		if err != nil {
+			return nil, errors.Annotatef(err, "GetTransactionSpecific")
+		}
+
+		// Serialize the raw JSON into TxSpecific struct
+		var txSpec txSpecific
+		err = json.Unmarshal(txSpecificJSON, &txSpec)
+		if err != nil {
+			return nil, errors.Annotatef(err, "Unmarshal")
+		}
+
+		// Calculate the TX size in bytes
+		txSize := 0
+		if txSpec.Vsize > 0 {
+			txSize = txSpec.Vsize
+		} else if txSpec.Size > 0 {
+			txSize = txSpec.Size
+		} else if txSpec.Hex != "" {
+			txSize = len(txSpec.Hex) / 2
+		} else {
+			errMsg := "Cannot determine the transaction size from neither Vsize, Size nor Hex! Txid: " + txid
+			return nil, NewAPIError(errMsg, true)
+		}
+
+		// Get values of TX inputs and outputs
+		txAddresses, err := w.db.GetTxAddresses(txid)
+		if err != nil {
+			return nil, errors.Annotatef(err, "GetTxAddresses")
+		}
+
+		// Calculate total fees in Satoshis
+		feeSat := big.NewInt(0)
+		for _, input := range txAddresses.Inputs {
+			feeSat = feeSat.Add(&input.ValueSat, feeSat)
+		}
+
+		// Zero inputs means it's a Coinbase TX - skip it
+		if feeSat.Cmp(big.NewInt(0)) == 0 {
+			continue
+		}
+
+		for _, output := range txAddresses.Outputs {
+			feeSat = feeSat.Sub(feeSat, &output.ValueSat)
+		}
+		totalFeesSat.Add(totalFeesSat, feeSat)
+
+		// Convert feeSat to fee per kilobyte and add to an array for decile calculation
+		feePerKb := int64(float64(feeSat.Int64()) / float64(txSize) * 1000)
+		averageFeePerKb += feePerKb
+		feesPerKb = append(feesPerKb, feePerKb)
+	}
+
+	var deciles [11]int64
+	n := len(feesPerKb)
+
+	if n > 0 {
+		averageFeePerKb /= int64(n)
+
+		// Sort fees and calculate the deciles
+		sort.Slice(feesPerKb, func(i, j int) bool { return feesPerKb[i] < feesPerKb[j] })
+		for k := 0; k <= 10; k++ {
+			index := int(math.Floor(0.5+float64(k)*float64(n+1)/10)) - 1
+			if index < 0 {
+				index = 0
+			} else if index >= n {
+				index = n - 1
+			}
+			deciles[k] = feesPerKb[index]
+		}
+	}
+
+	glog.Info("GetFeeStats ", bid, " (", len(feesPerKb), " txs) finished in ", time.Since(start))
+
+	return &FeeStats{
+		TxCount:         len(feesPerKb),
+		AverageFeePerKb: averageFeePerKb,
+		TotalFeesSat:    (*Amount)(totalFeesSat),
+		DecilesFeePerKb: deciles,
+	}, nil
+}
+
+// GetBlock returns paged data about block
+func (w *Worker) GetBlock(bid string, page int, txsOnPage int) (*Block, error) {
+	start := time.Now()
+	page--
+	if page < 0 {
+		page = 0
+	}
+	bi, err := w.getBlockInfoFromBlockID(bid)
 	if err != nil {
 		if err == bchain.ErrBlockNotFound {
 			return nil, NewAPIError("Block not found", true)
@@ -1128,13 +1263,19 @@ func prettifySize(size int64) string {
 // GetSystemInfo returns information about system
 func (w *Worker) GetSystemInfo(internal bool) (*SystemInfo, error) {
 	start := time.Now()
-	ci, err := w.chain.GetChainInfo()
-	if err != nil {
-		return nil, errors.Annotatef(err, "GetChainInfo")
-	}
 	vi := common.GetVersionInfo()
 	inSync, bestHeight, lastBlockTime := w.is.GetSyncState()
 	inSyncMempool, lastMempoolTime, mempoolSize := w.is.GetMempoolSyncState()
+	ci, err := w.chain.GetChainInfo()
+	var backendError string
+	if err != nil {
+		glog.Error("GetChainInfo error ", err)
+		backendError = errors.Annotatef(err, "GetChainInfo").Error()
+		ci = &bchain.ChainInfo{}
+		// set not in sync in case of backend error
+		inSync = false
+		inSyncMempool = false
+	}
 	var columnStats []common.InternalStateColumn
 	var internalDBSize int64
 	if internal {
@@ -1167,7 +1308,8 @@ func (w *Worker) GetSystemInfo(internal bool) (*SystemInfo, error) {
 		About:             Text.BlockbookAbout,
 	}
 	backendInfo := &BackendInfo{
-		Bestblockhash:   ci.Bestblockhash,
+		BackendError:    backendError,
+		BestBlockHash:   ci.Bestblockhash,
 		Blocks:          ci.Blocks,
 		Chain:           ci.Chain,
 		Difficulty:      ci.Difficulty,

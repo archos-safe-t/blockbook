@@ -74,6 +74,9 @@ func NewEthereumRPC(config json.RawMessage, pushHandler func(bchain.Notification
 	}
 
 	rc, ec, err := openRPC(c.RPCURL)
+	if err != nil {
+		return nil, err
+	}
 
 	s := &EthereumRPC{
 		BaseChain:   &bchain.BaseChain{},
@@ -327,13 +330,13 @@ func (b *EthereumRPC) GetSubversion() string {
 
 // GetChainInfo returns information about the connected backend
 func (b *EthereumRPC) GetChainInfo() (*bchain.ChainInfo, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), b.timeout)
-	defer cancel()
-	id, err := b.client.NetworkID(ctx)
+	h, err := b.getBestHeader()
 	if err != nil {
 		return nil, err
 	}
-	h, err := b.getBestHeader()
+	ctx, cancel := context.WithTimeout(context.Background(), b.timeout)
+	defer cancel()
+	id, err := b.client.NetworkID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -370,7 +373,8 @@ func (b *EthereumRPC) getBestHeader() (*ethtypes.Header, error) {
 		}
 	}
 	// if the best header was not updated for 15 minutes, there could be a subscription problem, reconnect RPC
-	if b.bestHeaderTime.Add(15 * time.Minute).Before(time.Now()) {
+	// do it only in case of normal operation, not initial synchronization
+	if b.bestHeaderTime.Add(15*time.Minute).Before(time.Now()) && !b.bestHeaderTime.IsZero() && b.mempoolInitialized {
 		err := b.reconnectRPC()
 		if err != nil {
 			return nil, err
@@ -383,6 +387,7 @@ func (b *EthereumRPC) getBestHeader() (*ethtypes.Header, error) {
 		defer cancel()
 		b.bestHeader, err = b.client.HeaderByNumber(ctx, nil)
 		if err != nil {
+			b.bestHeader = nil
 			return nil, err
 		}
 		b.bestHeaderTime = time.Now()

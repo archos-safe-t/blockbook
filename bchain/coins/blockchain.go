@@ -7,7 +7,9 @@ import (
 	"blockbook/bchain/coins/btc"
 	"blockbook/bchain/coins/btg"
 	"blockbook/bchain/coins/dash"
+	"blockbook/bchain/coins/dcr"
 	"blockbook/bchain/coins/digibyte"
+	"blockbook/bchain/coins/divi"
 	"blockbook/bchain/coins/dogecoin"
 	"blockbook/bchain/coins/eth"
 	"blockbook/bchain/coins/flo"
@@ -62,6 +64,8 @@ func init() {
 	BlockChainFactories["Bgold"] = btg.NewBGoldRPC
 	BlockChainFactories["Dash"] = dash.NewDashRPC
 	BlockChainFactories["Dash Testnet"] = dash.NewDashRPC
+	BlockChainFactories["Decred"] = dcr.NewDecredRPC
+	BlockChainFactories["Decred Testnet"] = dcr.NewDecredRPC
 	BlockChainFactories["GameCredits"] = gamecredits.NewGameCreditsRPC
 	BlockChainFactories["Koto"] = koto.NewKotoRPC
 	BlockChainFactories["Koto Testnet"] = koto.NewKotoRPC
@@ -94,6 +98,7 @@ func init() {
 	BlockChainFactories["ZelCash"] = zec.NewZCashRPC
 	BlockChainFactories["Ravencoin"] = ravencoin.NewRavencoinRPC
 	BlockChainFactories["Ritocoin"] = ritocoin.NewRitocoinRPC
+	BlockChainFactories["Divi"] = divi.NewDiviRPC
 }
 
 // GetCoinNameFromConfig gets coin name and coin shortcut from config file
