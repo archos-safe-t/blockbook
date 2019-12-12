@@ -1,4 +1,4 @@
-package viacoin
+package unobtanium
 
 import (
 	"blockbook/bchain"
@@ -12,14 +12,12 @@ import (
 
 // magic numbers
 const (
-	MainnetMagic wire.BitcoinNet = 0xcbc6680f
-	RegtestMagic wire.BitcoinNet = 0x377b972d
+	MainnetMagic wire.BitcoinNet = 0x03d5b503
 )
 
 // chain parameters
 var (
 	MainNetParams chaincfg.Params
-	RegtestParams chaincfg.Params
 )
 
 func init() {
@@ -27,44 +25,29 @@ func init() {
 	MainNetParams.Net = MainnetMagic
 
 	// Mainnet address encoding magics
-	MainNetParams.PubKeyHashAddrID = []byte{71} // base58 prefix: v
-	MainNetParams.ScriptHashAddrID = []byte{33} // base68 prefix: E
-	MainNetParams.Bech32HRPSegwit = "via"
-
-	RegtestParams = chaincfg.RegressionNetParams
-	RegtestParams.Net = RegtestMagic
-
-	// Regtest address encoding magics
-	RegtestParams.PubKeyHashAddrID = []byte{111} // base58 prefix: m or n
-	RegtestParams.ScriptHashAddrID = []byte{196} // base58 prefix: 2
-	RegtestParams.Bech32HRPSegwit = "tvia"
+	MainNetParams.PubKeyHashAddrID = []byte{130}
+	MainNetParams.ScriptHashAddrID = []byte{30}
 }
 
-// ViacoinParser handle
-type ViacoinParser struct {
+// UnobtaniumParser handle
+type UnobtaniumParser struct {
 	*btc.BitcoinParser
 }
 
-// NewViacoinParser returns new VertcoinParser instance
-func NewViacoinParser(params *chaincfg.Params, c *btc.Configuration) *ViacoinParser {
-	return &ViacoinParser{BitcoinParser: btc.NewBitcoinParser(params, c)}
+// NewUnobtaniumParser returns new UnobtaniumParser instance
+func NewUnobtaniumParser(params *chaincfg.Params, c *btc.Configuration) *UnobtaniumParser {
+	return &UnobtaniumParser{BitcoinParser: btc.NewBitcoinParser(params, c)}
 }
 
 // GetChainParams returns network parameters
 func GetChainParams(chain string) *chaincfg.Params {
 	if !chaincfg.IsRegistered(&MainNetParams) {
 		err := chaincfg.Register(&MainNetParams)
-		if err == nil {
-			err = chaincfg.Register(&RegtestParams)
-		}
 		if err != nil {
 			panic(err)
 		}
 	}
-
 	switch chain {
-	case "regtest":
-		return &RegtestParams
 	default:
 		return &MainNetParams
 	}
@@ -72,7 +55,7 @@ func GetChainParams(chain string) *chaincfg.Params {
 
 // ParseBlock parses raw block to our Block struct
 // it has special handling for Auxpow blocks that cannot be parsed by standard btc wire parse
-func (p *ViacoinParser) ParseBlock(b []byte) (*bchain.Block, error) {
+func (p *UnobtaniumParser) ParseBlock(b []byte) (*bchain.Block, error) {
 	r := bytes.NewReader(b)
 	w := wire.MsgBlock{}
 	h := wire.BlockHeader{}
